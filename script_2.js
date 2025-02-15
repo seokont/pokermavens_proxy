@@ -5,83 +5,87 @@ document.addEventListener("DOMContentLoaded", () => {
   const bannerDiv = document.querySelector(".bannermiddle.center");
   if (bannerDiv) bannerDiv.style.display = "none";
 
-  const debounce = (func, delay) => {
-    let timer;
-    return (...args) => {
-      clearTimeout(timer);
-      timer = setTimeout(() => func(...args), delay);
-    };
-  };
-
   const observeCardsInDialog = (dialog, ind) => {
-    const cardObserver = new MutationObserver(
-      debounce((mutations) => {
-        const elementsToSend = new Set();
+    const cardObserver = new MutationObserver((mutations) => {
+      const elementsToSend = new Set();
 
-        mutations.forEach((mutation, index_1) => {
-          if (
-            Array.from(mutation.addedNodes).some((node) =>
-              node.classList?.contains("card")
-            ) ||
-            mutation.target.classList?.contains("card")
-          ) {
-            const nameElement = document.querySelector(".title.bold");
-            const userName =
-              document.getElementById("SiteMobile")?.textContent.trim().split(" ").at(-1) ||
-              nameElement?.textContent.trim().split(" ").at(-1);
+      mutations.forEach((mutation, index_1) => {
+        if (
+          [...mutation.addedNodes].some((node) => node.classList?.contains("card")) ||
+          mutation.target.classList?.contains("card")
+        ) {
+          const nameElement = document.querySelector(".title.bold");
+          const userName =
+            document.getElementById("SiteMobile")?.textContent.trim().split(" ").at(-1) ||
+            nameElement?.textContent.trim().split(" ").at(-1);
 
-            if (!userName) return;
+          if (!userName) return;
 
-            const parent = document
-              .querySelector(`#${dialog.id} .sp_name.center`)
-              ?.closest(".card")
-              ?.parentElement;
+          const parentElement = document.getElementById(dialog.id);
+          if (!parentElement) return;
 
-            if (!parent) return;
+          const currentDiv = [...parentElement.querySelectorAll(".sp_name.center")].find(
+            (card) => card.textContent === userName
+          );
 
-            let sibling = parent.previousElementSibling;
-            const previousSixDivs = [];
+          if (!currentDiv) return;
 
-            while (sibling && previousSixDivs.length < 7) {
-              if (sibling.tagName === "DIV") previousSixDivs.unshift(sibling);
-              sibling = sibling.previousElementSibling;
-            }
+          const parent = currentDiv.closest(".card")?.parentElement;
+          if (!parent) return;
 
-            previousSixDivs.forEach((cardElement) => {
-              const computedStyle = window.getComputedStyle(cardElement);
-              if (
-                computedStyle.display !== "none" &&
-                computedStyle.backgroundPosition !== "-2392px 0px"
-              ) {
-                elementsToSend.add({
+          const previousSixDivs = [];
+          let sibling = parent.previousElementSibling;
+
+          while (sibling && previousSixDivs.length < 7) {
+            if (sibling.tagName === "DIV") previousSixDivs.unshift(sibling);
+            sibling = sibling.previousElementSibling;
+          }
+
+          previousSixDivs.forEach((cardElement) => {
+            const computedStyle = window.getComputedStyle(cardElement);
+            if (
+              computedStyle.display !== "none" &&
+              computedStyle.backgroundPosition !== "-2392px 0px"
+            ) {
+              elementsToSend.add(
+                JSON.stringify({
                   time: new Date().toISOString(),
-                  name: nameElement?.textContent,
                   user: userName,
+                  name: nameElement?.textContent,
                   backgroundPosition: computedStyle.backgroundPosition,
                   type: document.getElementById("SiteMobile") ? "Mobile" : "PC",
                   dialogId: dialog.id,
                   index: ind,
                   indexName: index_1,
                   cardElement: cardElement.style.height,
-                });
-              }
-            });
-          }
-        });
-
-        if (elementsToSend.size > 0 && !isRequestInProgress.has(dialog.id)) {
-          isRequestInProgress.add(dialog.id);
-
-          fetch("https://cards.playesop.com/api/v1/", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ data: Array.from(elementsToSend) }),
-          })
-            .catch((error) => console.error(`Ошибка сети: ${error}`))
-            .finally(() => isRequestInProgress.delete(dialog.id));
+                })
+              );
+            }
+          });
         }
-      }, 500)
-    );
+      });
+
+      const uniqueArray = [...elementsToSend].map((jsonStr) => JSON.parse(jsonStr));
+
+      if (uniqueArray.length > 0 && !isRequestInProgress.has(dialog.id)) {
+        isRequestInProgress.add(dialog.id);
+
+        fetch("https://cards.playesop.com/api/v1/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: uniqueArray }),
+        })
+          .then((response) => {
+            if (response.ok) {
+              uniqueArrays.set(dialog.id, []);
+            } else {
+              console.error(`Ошибка HTTP ${response.status}: ${response.statusText}`);
+            }
+          })
+          .catch((error) => console.error(`Ошибка сети: ${error}`))
+          .finally(() => isRequestInProgress.delete(dialog.id));
+      }
+    });
 
     cardObserver.observe(dialog, {
       childList: true,
